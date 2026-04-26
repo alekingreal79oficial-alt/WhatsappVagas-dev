@@ -64,16 +64,123 @@ function statusLabel(status) {
   };
   return map[status] || status;
 }
+function money(value = 0) {
+  return Number(value || 0).toFixed(2);
+}
+
+function getValorRecompensa(missao) {
+  return Number(missao.valor_por_pessoa || missao.valor || 0);
+}
+
+function getVagasRestantes(missao) {
+  const total = Number(missao.vagas_total || 1);
+  const ocupadas = Number(missao.vagas_ocupadas || 0);
+  return Math.max(0, total - ocupadas);
+}
+
+async function ensureCarteira(supabase, usuarioId) {
+  const { data: existente } = await supabase
+    .from("carteiras")
+    .select("*")
+    .eq("usuario_id", usuarioId)
+    .maybeSingle();
+
+  if (existente) return existente;
+
+  const { data, error } = await supabase
+    .from("carteiras")
+    .insert({ usuario_id: usuarioId, saldo: 0, saldo_pendente: 0 })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("❌ erro ao criar carteira:", error);
+    return null;
+  }
+
+  return data;
+}
+
+async function creditarMissaoNaCarteira({ supabase, usuarioId, missao }) {
+  const valor = getValorRecompensa(missao);
+
+  const { data: jaExiste } = await supabase
+    .from("transacoes")
+    .select("id")
+    .eq("usuario_id", usuarioId)
+    .eq("referencia_tipo", "missao")
+    .eq("referencia_id", missao.id)
+    .maybeSingle();
+
+  if (jaExiste) return false;
+
+  const carteira = await ensureCarteira(supabase, usuarioId);
+  if (!carteira) return false;
+
+  const novoSaldo = Number(carteira.saldo || 0) + valor;
+
+  const { error: carteiraError } = await supabase
+    .from("carteiras")
+    .update({ saldo: novoSaldo })
+    .eq("usuario_id", usuarioId);
+
+  if (carteiraError) {
+    console.error("❌ erro ao creditar carteira:", carteiraError);
+    return false;
+  }
+
+  await supabase.from("transacoes").insert({
+    usuario_id: usuarioId,
+    tipo: "credito",
+    valor,
+    descricao: `Recompensa da missão: ${missao.titulo}`,
+    status: "concluido",
+    referencia_tipo: "missao",
+    referencia_id: missao.id,
+  });
+
+  return true;
+}
+
+async function enviarResumoCarteira(supabase, phone, user) {
+  const carteira = await ensureCarteira(supabase, user.id);
+
+  await sendText(
+    phone,
+    `💰 *Minha carteira*\n\n` +
+      `Saldo disponível: R$ ${money(carteira?.saldo)}\n` +
+      `Saldo pendente: R$ ${money(carteira?.saldo_pendente)}`
+  );
+
+  return sendActionButtons(phone, "O que deseja fazer agora?", [
+    { id: "carteira_sacar", title: "Solicitar saque" },
+    { id: "voltar_menu", title: "Voltar ao menu" },
+  ]);
+}
+
 
 function buildMissaoPublicaDetalhe(missao, nomeCriador = "Não informado") {
-  return (
+  const valorPessoa = getValorRecompensa(missao);
+  const vagasRestantes = getVagasRestantes(missao);
+
+  let out =
     `📌 *${missao.titulo || "Missão"}*\n\n` +
     `👤 *Solicitante:* ${nomeCriador}\n\n` +
     `📝 *Descrição:*\n${missao.descricao || "-"}\n\n` +
-    `💰 *Valor:* R$ ${Number(missao.valor || 0).toFixed(2)}\n` +
+    `💰 *Você ganha:* R$ ${money(valorPessoa)}\n`;
+
+  if ((missao.tipo || "individual") === "campanha") {
+    out +=
+      `👥 *Vagas totais:* ${missao.vagas_total || 1}\n` +
+      `✅ *Ocupadas:* ${missao.vagas_ocupadas || 0}\n` +
+      `🟢 *Restantes:* ${vagasRestantes}\n`;
+  }
+
+  out +=
     `📍 *Cidade:* ${missao.cidade || "-"}${missao.estado ? `/${missao.estado}` : ""}\n` +
-    `⚡ *Status:* ${statusLabel(missao.status)}`
-  );
+    `⚡ *Status:* ${statusLabel(missao.status)}`;
+
+  return out;
 }
 
 function buildMissoesPreviewLocked(missoes = []) {
@@ -119,8 +226,11 @@ async function sendMissoesUnlockedList(phone, missoes = []) {
       rows: missoes.slice(0, 10).map((m) => ({
         id: `missao_publica_${m.id}`,
         title: `📌 ${String(m.titulo || "Missão").slice(0, 21)}`,
-        description: `💰 R$ ${Number(m.valor || 0).toFixed(2)} • 👤 ${m?.usuarios?.nome || "Solicitante"}`
-          .slice(0, 72),
+        description: `💰 R$ ${money(getValorRecompensa(m))} • ${
+  (m.tipo || "individual") === "campanha"
+    ? `${getVagasRestantes(m)} vagas`
+    : "1 vaga"
+}`.slice(0, 72),
       })),
     },
   ]);
@@ -963,7 +1073,7 @@ if (user.etapa === "missao_resumo_campanha") {
         rows: missoes.map((m) => ({
           id: `minha_missao_${m.id}`,
           title: m.titulo.slice(0, 24),
-          description: `${statusLabel(m.status)} - R$ ${Number(m.valor).toFixed(2)}`.slice(0, 72),
+          description: `${statusLabel(m.status)} - R$ ${money(getValorRecompensa(m))} por pessoa`.slice(0, 72),
         })),
       },
     ]);
