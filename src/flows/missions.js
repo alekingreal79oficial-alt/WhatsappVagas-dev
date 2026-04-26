@@ -427,16 +427,7 @@ export async function handleMissions({
   // LISTA PÚBLICA DE MISSÕES
   // =====================
 
-  if (text === "user_ver_missoes") {
-    
 
-if (text === "jobs_total_buy_month") {
-  return gerarPagamentoPlanoTotal({
-    supabase,
-    phone,
-    user,
-  });
-}
 
 // ATIVAR PACOTE AVULSO DE MISSOES 
 
@@ -450,39 +441,17 @@ if (text === "missoes_buy_single") {
   });
 } */}
 
-if (text === "missoes_buy_month") {
-  return gerarPagamentoMissaoMensal({
-    supabase,
-    phone,
-    user,
-  });
-}
-
-if (text === "jobs_missions_buy_month") {
-  return gerarPagamentoComboVagasMissoes({
-    supabase,
-    phone,
-    user,
-  });
-}
-
-if (text === "jobs_total_buy_month") {
-  return gerarPagamentoPlanoTotal({
-    supabase,
-    phone,
-    user,
-  });
-}
+if (text === "user_ver_missoes") {
   const { data: missoes, error } = await supabase
-  .from("missoes")
-  .select(`
-    *,
-    usuarios:usuarios!missoes_usuario_id_fkey (
-      id,
-      nome,
-      telefone
-    )
-  `)
+    .from("missoes")
+    .select(`
+      *,
+      usuarios:usuarios!missoes_usuario_id_fkey (
+        id,
+        nome,
+        telefone
+      )
+    `)
     .eq("status", "aberta")
     .order("created_at", { ascending: false })
     .limit(10);
@@ -490,24 +459,24 @@ if (text === "jobs_total_buy_month") {
   if (error) {
     console.error("❌ erro ao buscar missões:", error);
     await sendText(phone, "Erro ao buscar missões.");
-    return sendActionButtons(phone, "O que deseja fazer agora?", [
+    return sendActionButtons(phone, [
       { id: "voltar_menu", title: "Voltar ao menu" },
     ]);
   }
 
   if (!missoes?.length) {
     await sendText(phone, "Sem missões no momento.");
-    return sendActionButtons(phone, "O que deseja fazer agora?", [
+    return sendActionButtons(phone, [
       { id: "voltar_menu", title: "Voltar ao menu" },
     ]);
   }
 
   await sendText(
-  phone,
-  `✅ Encontramos *${missoes.length}* missão(ões) disponíveis para você.`
-);
+    phone,
+    `✅ Encontramos *${missoes.length}* missão(ões) disponíveis para você.`
+  );
 
-return sendMissoesUnlockedList(phone, missoes);
+  return sendMissoesUnlockedList(phone, missoes);
 }
 
   if (text.startsWith("missao_publica_")) {
@@ -738,33 +707,97 @@ const { data: missao, error } = await supabase
   }
 
   if (user.etapa === "missao_valor") {
-    const valor = Number(String(text).replace(",", "."));
+  const valor = Number(String(text).replace(",", "."));
 
-    if (!valor || valor <= 0) {
-      return sendText(phone, "Digite um valor válido.\nEx: 40");
-    }
-
-    await updateUser({
-      etapa: "missao_urgencia",
-      missao_valor_temp: String(valor),
-    });
-
-    const taxa = calcMissaoTaxa(valor);
-
-    return sendActionButtons(
-      phone,
-      `Resumo da missão:\n\nValor da missão: R$ ${valor.toFixed(
-        2
-      )}\nTaxa da plataforma (10%): R$ ${taxa.toFixed(
-        2
-      )}\n\nQuer adicionar urgência por +R$ 4,90?`,
-      [
-        { id: "missao_urgencia_sim", title: "Com urgência" },
-        { id: "missao_urgencia_nao", title: "Sem urgência" },
-        { id: "voltar_menu", title: "Voltar ao menu" },
-      ]
-    );
+  if (!valor || valor <= 0) {
+    return sendText(phone, "Digite um valor válido.\nEx: 40");
   }
+
+  await updateUser({
+    etapa: "missao_tipo",
+    missao_valor_temp: String(valor),
+  });
+
+  return sendActionButtons(
+    phone,
+    "Essa missão será:",
+    [
+      { id: "missao_tipo_individual", title: "Para 1 pessoa" },
+      { id: "missao_tipo_campanha", title: "Para várias pessoas" },
+      { id: "voltar_menu", title: "Voltar ao menu" },
+    ]
+  );
+}
+
+
+if (user.etapa === "missao_tipo" && text === "missao_tipo_individual") {
+  await updateUser({
+    etapa: "missao_urgencia",
+    missao_tipo_temp: "individual",
+    vagas_total_temp: 1,
+  });
+
+  const valorBase = Number(user.missao_valor_temp || 0);
+  const taxa = calcMissaoTaxa(valorBase);
+
+  return sendActionButtons(
+    phone,
+    `Resumo:\n\nValor: R$ ${valorBase.toFixed(2)}\nTaxa: R$ ${taxa.toFixed(2)}\n\nAdicionar urgência?`,
+    [
+      { id: "missao_urgencia_sim", title: "Com urgência" },
+      { id: "missao_urgencia_nao", title: "Sem urgência" },
+    ]
+  );
+}
+
+if (user.etapa === "missao_tipo" && text === "missao_tipo_campanha") {
+  await updateUser({
+    etapa: "missao_qtd_pessoas",
+    missao_tipo_temp: "campanha",
+  });
+
+  return sendText(
+    phone,
+    "Quantas pessoas você quer atingir?\nEx: 10"
+  );
+}
+
+
+if (user.etapa === "missao_qtd_pessoas") {
+  const qtd = Number(text);
+
+  if (!qtd || qtd <= 0) {
+    return sendText(phone, "Digite um número válido.\nEx: 10");
+  }
+
+  await updateUser({
+    etapa: "missao_resumo_campanha",
+    vagas_total_temp: qtd,
+  });
+
+  const total = Number(user.missao_valor_temp || 0);
+  const valorPorPessoa = total / qtd;
+
+  await sendText(
+    phone,
+    `📊 *Resumo da campanha*\n\n` +
+    `💰 Total: R$ ${total.toFixed(2)}\n` +
+    `👥 Pessoas: ${qtd}\n` +
+    `🎯 Por pessoa: R$ ${valorPorPessoa.toFixed(2)}`
+  );
+
+  return sendActionButtons(
+    phone,
+    "Deseja continuar?",
+    [
+      { id: "missao_confirmar_campanha", title: "Confirmar" },
+      { id: "voltar_menu", title: "Cancelar" },
+    ]
+  );
+}
+
+
+
 
   if (
     user.etapa === "missao_urgencia" &&
@@ -780,16 +813,25 @@ const { data: missao, error } = await supabase
       referenciaTipo: "missao_publicacao",
       planoCodigo: urgencia ? "missao_urgencia" : null,
       valor: resumo.total,
-      metadata: {
-        titulo: user.missao_titulo,
-        descricao: user.missao_desc,
-        valor_missao: resumo.valorMissao,
-        taxa_plataforma: resumo.taxa,
-        urgencia,
-        categoria_chave: categoria,
-        cidade: user.cidade,
-        estado: user.estado,
-      },
+     metadata: {
+  titulo: user.missao_titulo,
+  descricao: user.missao_desc,
+
+  tipo: user.missao_tipo_temp || "individual",
+  vagas_total: Number(user.vagas_total_temp || 1),
+  valor_total: Number(user.missao_valor_temp || 0),
+  valor_por_pessoa:
+    user.missao_tipo_temp === "campanha"
+      ? Number(user.missao_valor_temp || 0) / Number(user.vagas_total_temp || 1)
+      : Number(user.missao_valor_temp || 0),
+
+  valor_missao: resumo.valorMissao,
+  taxa_plataforma: resumo.taxa,
+  urgencia,
+  categoria_chave: categoria,
+  cidade: user.cidade,
+  estado: user.estado,
+},
     });
 
     if (!payment) {
