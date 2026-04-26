@@ -440,7 +440,9 @@ if (text === "missoes_buy_single") {
     user,
   });
 } */}
-
+if (text === "user_carteira") {
+  return enviarResumoCarteira(supabase, phone, user);
+}
 if (text === "user_ver_missoes") {
   const { data: missoes, error } = await supabase
     .from("missoes")
@@ -1224,10 +1226,41 @@ if (user.etapa === "missao_resumo_campanha") {
     }
 
     await supabase.from("missoes").update(novosDados).eq("id", missaoId);
+if (status === "concluida") {
+  if (missao.executor_usuario_id) {
+    await creditarMissaoNaCarteira({
+      supabase,
+      usuarioId: missao.executor_usuario_id,
+      missao,
+    });
 
-    if (status === "concluida") {
-      return sendText(phone, "✅ Missão concluída com sucesso e removida da lista pública.");
+    const { data: executor } = await supabase
+      .from("usuarios")
+      .select("id,telefone,nome")
+      .eq("id", missao.executor_usuario_id)
+      .maybeSingle();
+
+    if (executor?.telefone) {
+      await sendText(
+        executor.telefone,
+        `🎉 *Missão concluída!*\n\n` +
+          `Você ganhou *R$ ${money(getValorRecompensa(missao))}* pela missão:\n` +
+          `📌 ${missao.titulo}`
+      );
+
+      await sendActionButtons(executor.telefone, "Deseja ver seu saldo?", [
+        { id: "user_carteira", title: "Ver saldo" },
+        { id: "voltar_menu", title: "Voltar ao menu" },
+      ]);
     }
+  }
+
+  return sendText(
+    phone,
+    `✅ Missão concluída com sucesso.\n\n` +
+      `👥 Vagas restantes: ${getVagasRestantes(missao)}`
+  );
+}
 
     return sendText(phone, "✅ Sua confirmação foi registrada.");
   }
