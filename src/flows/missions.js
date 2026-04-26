@@ -797,7 +797,48 @@ if (user.etapa === "missao_qtd_pessoas") {
 }
 
 
+if (user.etapa === "missao_resumo_campanha") {
+  if (text === "missao_confirmar_campanha") {
+    await updateUser({
+      etapa: "missao_urgencia",
+    });
 
+    const valorBase = Number(user.missao_valor_temp || 0);
+    const vagasTotal = Number(user.vagas_total_temp || 1);
+    const valorPorPessoa = valorBase / vagasTotal;
+    const taxa = calcMissaoTaxa(valorBase);
+
+    return sendActionButtons(
+      phone,
+      `📊 *Campanha confirmada*\n\n` +
+        `💰 Total: R$ ${valorBase.toFixed(2)}\n` +
+        `👥 Pessoas: ${vagasTotal}\n` +
+        `🎯 Por pessoa: R$ ${valorPorPessoa.toFixed(2)}\n` +
+        `🧾 Taxa da plataforma: R$ ${taxa.toFixed(2)}\n\n` +
+        `Quer adicionar urgência por +R$ 4,90?`,
+      [
+        { id: "missao_urgencia_sim", title: "Com urgência" },
+        { id: "missao_urgencia_nao", title: "Sem urgência" },
+        { id: "voltar_menu", title: "Voltar ao menu" },
+      ]
+    );
+  }
+
+  if (text === "voltar_menu") {
+    await updateUser({
+      etapa: "menu",
+      missao_titulo: null,
+      missao_desc: null,
+      missao_valor_temp: null,
+      missao_tipo_temp: null,
+      vagas_total_temp: null,
+    });
+
+    return sendText(phone, "Criação da campanha cancelada.");
+  }
+
+  return sendText(phone, "Escolha uma opção: Confirmar ou Cancelar.");
+}
 
   if (
     user.etapa === "missao_urgencia" &&
