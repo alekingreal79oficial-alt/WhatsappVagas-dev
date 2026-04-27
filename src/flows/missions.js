@@ -78,9 +78,7 @@ function getTaxaExecutor(missao) {
   return getValorBrutoRecompensa(missao) * 0.1;
 }
 
-function getValorRecompensa(missao) {
-  return getValorBrutoRecompensa(missao) - getTaxaExecutor(missao);
-}
+
 
 function getVagasRestantes(missao) {
   const total = Number(missao.vagas_total || 1);
