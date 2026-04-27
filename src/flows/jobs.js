@@ -1114,14 +1114,7 @@ if (text === "confirm_jobs_unlock_lista") {
   });
 }
 
-    await sendText(phone, buildJobsPreviewLocked(vagas));
-
-    return sendActionButtons(phone, "Escolha como deseja continuar:", [
-      { id: "jobs_buy_single", title: "Liberar por R$ 4,90" },
-      { id: "jobs_pacotes", title: "Ver pacotes" },
-      { id: "voltar_menu", title: "Voltar ao menu" },
-    ]);
-  }
+    
 if (text === "confirm_jobs_buy_single") {
   return gerarPagamentoPix({
     supabase,
@@ -1651,7 +1644,7 @@ if (text === "jobs_buy_week_plus2") {
 }
 
   return false;
-
+}
 
 export async function handleUserFallback(phone) {
   return sendMenuUsuario(phone);
