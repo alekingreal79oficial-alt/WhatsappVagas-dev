@@ -1204,6 +1204,82 @@ if (text === "confirm_jobs_total_buy_month") {
   });
 }
 
+if (text === "confirm_jobs_buy_week_base") {
+  return gerarPagamentoPix({
+    supabase,
+    phone,
+    user,
+    planoCodigo: "vaga_semanal_usuario",
+    referenciaTipo: "usuario_vagas_semanal",
+    tituloPlano: "Notificações semanais - categoria atual",
+    valorFinal: 9.9,
+    metadataExtra: {
+      notificacao_scope: "categoria_atual",
+      categorias_extras: [],
+    },
+    afterSuccessLabel:
+      "Assim que o pagamento for aprovado, você passará a receber notificações semanais da sua categoria atual.",
+  });
+}
+
+if (text === "confirm_jobs_buy_week_plus2") {
+  await updateUser({
+    etapa: "jobs_week_plus2_cat_1",
+    categorias_extras_temp: [],
+  });
+
+  const { data: categorias, error } = await supabase
+   .from("categorias")
+.select("id, nome, chave, area_chave, ordem")
+.eq("ativo", true)
+.eq("area_chave", user.area_principal)
+.order("ordem", { ascending: true })
+.order("nome", { ascending: true })
+
+  if (error) {
+    console.error("❌ erro ao buscar categorias extras semanais:", error);
+    await sendText(phone, "Erro ao carregar categorias extras.");
+    return sendActionButtons(phone, "O que deseja fazer agora?", [
+      { id: "jobs_pacotes", title: "Ver notificações" },
+      { id: "voltar_menu", title: "Voltar ao menu" },
+    ]);
+  }
+const categoriasFiltradas = (categorias || []).filter(
+  (c) => c.chave !== user.categoria_principal
+);
+
+await sendText(
+  phone,
+  `Escolha a 1ª categoria extra:\n\n${buildPreviewList(categoriasFiltradas)}\n\n👇 Toque em "Ver opções" para selecionar.`
+);
+return sendList(phone, "Selecione uma categoria:", [
+  {
+    title: "Categorias",
+    rows: categoriasFiltradas.slice(0, 10).map((c) => ({
+      id: `extra_cat1_${c.id}`,
+      title: shortTitle(c.nome),
+    })),
+  },
+]);
+}
+
+if (text === "confirm_jobs_buy_week_all") {
+  return gerarPagamentoPix({
+    supabase,
+    phone,
+    user,
+    planoCodigo: "vaga_semanal_usuario",
+    referenciaTipo: "usuario_vagas_semanal",
+    tituloPlano: "Notificações semanais - todas as categorias",
+    valorFinal: 17.8,
+    metadataExtra: {
+      notificacao_scope: "todas",
+      categorias_extras: [],
+    },
+    afterSuccessLabel:
+      "Assim que o pagamento for aprovado, você passará a receber notificações semanais de todas as categorias.",
+  });
+}
 
 if (text === "confirm_jobs_buy_month_base") {
   return gerarPagamentoPix({
@@ -1522,7 +1598,22 @@ if (text === "jobs_missions_buy_month") {
 if (text === "jobs_total_buy_month") {
   return explicarPacoteAntesDoPagamento(phone, "jobs_total_buy_month");
 }
+  // =====================
+  // NOTIFICAÇÕES SEMANAIS
+  // =====================
+if (text === "jobs_buy_week_base") {
+  return explicarPacoteAntesDoPagamento(phone, "jobs_buy_week_base");
+}
 
+if (text === "jobs_buy_week_plus2") {
+  return explicarPacoteAntesDoPagamento(phone, "jobs_buy_week_plus2");
+}
+
+  if (text === "jobs_buy_week_all") {
+
+  return explicarPacoteAntesDoPagamento(phone, "jobs_buy_week_all");
+
+}
 
 
 

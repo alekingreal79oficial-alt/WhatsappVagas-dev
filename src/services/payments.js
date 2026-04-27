@@ -573,12 +573,16 @@ export async function applyProfessionalHighlightFromPayment(payment) {
   }
 
   const novoNivel = Math.max(Number(servico.nivel_visibilidade || 0), 1);
-
+const md = payment.metadata || {};
+const dias = Number(md.dias_destaque || 30);
+const destaqueAte = new Date();
+destaqueAte.setDate(destaqueAte.getDate() + dias);
   const { data, error } = await supabase
     .from("servicos")
-    .update({
-      nivel_visibilidade: novoNivel,
-    })
+   .update({
+  nivel_visibilidade: novoNivel,
+  destaque_ate: destaqueAte.toISOString(),
+})
     .eq("id", servico.id)
     .select()
     .single();

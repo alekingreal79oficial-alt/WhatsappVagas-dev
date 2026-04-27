@@ -1177,7 +1177,7 @@ if (tipo === "campanha") {
       etapa: "missao_valor",
     });
 
-    return sendText(phone, "Qual valor você quer pagar?\nEx: 40");
+    return sendText(phone, "Qual valor você deseja investir?\nEsse valor será dividido pela quantidade de vagas!");
   }
 
   if (user.etapa === "missao_valor") {

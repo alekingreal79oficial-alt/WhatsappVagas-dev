@@ -14,14 +14,15 @@ export function sendRootMenu(phone) {
 
 export function sendMenuUsuario(phone) {
   return sendList(phone, "💼 Menu do trabalhador:", [
-    {
-      title: "Buscar oportunidades",
-      rows: [
-        { id: "user_ver_vagas_categoria", title: "📌 Vagas minha área" },
-{ id: "user_explorar_vagas", title: "🌍 Todas as vagas" },
-{ id: "jobs_pacotes", title: "🔔 Notificações" },
-      ],
-    },
+   {
+  title: "Buscar oportunidades",
+  rows: [
+    { id: "user_ver_vagas", title: "📌 Vagas minha área" },
+    { id: "user_explorar_vagas", title: "🌍 Todas as vagas" },
+    { id: "user_ver_missoes", title: "🛠️ Missões / bicos" },
+    { id: "jobs_pacotes", title: "🔔 Notificações" },
+  ],
+},
     {
       title: "Perfil profissional",
       rows: [
