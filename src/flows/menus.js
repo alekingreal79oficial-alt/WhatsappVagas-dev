@@ -18,8 +18,8 @@ export function sendMenuUsuario(phone) {
       title: "Buscar oportunidades",
       rows: [
         { id: "user_ver_vagas_categoria", title: "📌 Vagas da minha área" },
-{ id: "user_explorar_vagas", title: "🌍 Explorar todas as vagas" },
-{ id: "jobs_pacotes", title: "🔔 Receber vagas automaticamente" },
+{ id: "user_explorar_vagas", title: "🌍 Todas as vagas" },
+{ id: "jobs_pacotes", title: "🔔 Pacotes de Notificações" },
       ],
     },
     {
