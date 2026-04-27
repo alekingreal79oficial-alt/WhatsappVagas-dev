@@ -637,9 +637,11 @@ const { data: missao, error } = await supabase
 
   if (error || !missao) return sendText(phone, "Missão não encontrada.");
 
-  if (missao.usuario_id === user.id) {
-    return sendText(phone, "Você não pode aceitar a própria missão.");
-  }
+  const allowSelfMissionTest = process.env.ALLOW_SELF_MISSION_TEST === "true";
+
+if (missao.usuario_id === user.id && !allowSelfMissionTest) {
+  return sendText(phone, "Você não pode aceitar a própria missão.");
+}
 
   if (missao.status !== "aberta") {
     return sendText(phone, "Essa missão não está mais disponível.");
