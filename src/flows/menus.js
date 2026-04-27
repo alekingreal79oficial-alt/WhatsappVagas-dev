@@ -31,9 +31,12 @@ export function sendMenuUsuario(phone) {
       ],
     },
     {
-      title: "Perfil",
-      rows: [{ id: "redefinir_perfil", title: "Redefinir perfil" }],
-    },
+  title: "Perfil",
+  rows: [
+    { id: "user_carteira", title: "Minha carteira" },
+    { id: "redefinir_perfil", title: "Redefinir perfil" },
+  ],
+},
   ]);
 }
 
