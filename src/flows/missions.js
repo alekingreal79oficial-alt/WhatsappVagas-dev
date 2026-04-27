@@ -553,6 +553,139 @@ if (text === "missoes_buy_single") {
 if (text === "user_carteira") {
   return enviarResumoCarteira(supabase, phone, user);
 }
+
+if (text === "carteira_sacar") {
+  const carteira = await ensureCarteira(supabase, user.id);
+
+  if (Number(carteira?.saldo || 0) <= 0) {
+    return sendText(phone, "Você ainda não tem saldo disponível para saque.");
+  }
+
+  if (!carteira.pix_chave || !carteira.pix_chave_tipo) {
+    await updateUser({ etapa: "saque_pix_tipo" });
+
+    return sendList(phone, "Escolha o tipo da sua chave Pix:", [
+      {
+        title: "Tipo de chave",
+        rows: [
+          { id: "pix_tipo_cpf", title: "CPF" },
+          { id: "pix_tipo_cnpj", title: "CNPJ" },
+          { id: "pix_tipo_email", title: "E-mail" },
+          { id: "pix_tipo_celular", title: "Celular" },
+          { id: "pix_tipo_aleatoria", title: "Chave aleatória" },
+        ],
+      },
+    ]);
+  }
+
+  await updateUser({ etapa: "saque_valor" });
+
+  return sendText(
+    phone,
+    `💰 Saldo disponível: R$ ${money(carteira.saldo)}\n\nQuanto deseja sacar?`
+  );
+}
+if (user.etapa === "saque_pix_tipo") {
+  if (!text.startsWith("pix_tipo_")) {
+    return sendText(phone, "Escolha o tipo da chave Pix pela lista.");
+  }
+
+  const tipo = text.replace("pix_tipo_", "");
+
+  await updateUser({
+    etapa: "saque_pix_chave",
+    pix_chave_tipo_temp: tipo,
+  });
+
+  return sendText(phone, "Agora digite sua chave Pix:");
+}
+
+if (user.etapa === "saque_pix_chave") {
+  const chave = String(text || "").trim();
+
+  if (chave.length < 3) {
+    return sendText(phone, "Digite uma chave Pix válida.");
+  }
+
+  await ensureCarteira(supabase, user.id);
+
+  await supabase
+    .from("carteiras")
+    .update({
+      pix_chave_tipo: user.pix_chave_tipo_temp || "nao_informado",
+      pix_chave: chave,
+    })
+    .eq("usuario_id", user.id);
+
+  await updateUser({
+    etapa: "saque_valor",
+    pix_chave_tipo_temp: null,
+  });
+
+  const carteira = await ensureCarteira(supabase, user.id);
+
+  return sendText(
+    phone,
+    `✅ Chave Pix cadastrada.\n\nSaldo disponível: R$ ${money(carteira.saldo)}\n\nQuanto deseja sacar?`
+  );
+}
+
+if (user.etapa === "saque_valor") {
+  const valor = Number(String(text).replace(",", "."));
+  const carteira = await ensureCarteira(supabase, user.id);
+
+  if (!valor || valor <= 0) {
+    return sendText(phone, "Digite um valor válido para saque.");
+  }
+
+  if (valor > Number(carteira.saldo || 0)) {
+    return sendText(phone, `Saldo insuficiente. Seu saldo é R$ ${money(carteira.saldo)}.`);
+  }
+
+  const novoSaldo = Number(carteira.saldo || 0) - valor;
+  const novoPendente = Number(carteira.saldo_pendente || 0) + valor;
+
+  await supabase
+    .from("carteiras")
+    .update({
+      saldo: novoSaldo,
+      saldo_pendente: novoPendente,
+    })
+    .eq("usuario_id", user.id);
+
+  await supabase.from("saques").insert({
+    usuario_id: user.id,
+    valor,
+    chave_pix: carteira.pix_chave,
+    chave_pix_tipo: carteira.pix_chave_tipo,
+    status: "pendente",
+  });
+
+  await supabase.from("transacoes").insert({
+    usuario_id: user.id,
+    tipo: "debito",
+    valor,
+    descricao: "Solicitação de saque",
+    status: "pendente",
+    referencia_tipo: "saque",
+  });
+
+  await updateUser({ etapa: "menu" });
+
+  await sendText(
+    phone,
+    `💰 *Saque solicitado*\n\n` +
+      `Valor: R$ ${money(valor)}\n` +
+      `Chave Pix: ${carteira.pix_chave}\n\n` +
+      `Saldo disponível agora: R$ ${money(novoSaldo)}\n` +
+      `Saldo em processamento: R$ ${money(novoPendente)}`
+  );
+
+  return sendText(
+    phone,
+    "✅ Sua solicitação de saque está em processamento. Assim que for pago, você receberá a confirmação por aqui."
+  );
+}
 if (text === "user_ver_missoes") {
   const { data: missoes, error } = await supabase
     .from("missoes")
@@ -656,7 +789,23 @@ if (missao.usuario_id === user.id && !allowSelfMissionTest) {
     if (ocupadas >= total) {
       return sendText(phone, "Essa campanha já atingiu o limite de participantes.");
     }
+const { data: dono } = await supabase
+  .from("usuarios")
+  .select("id,nome,telefone")
+  .eq("id", missao.usuario_id)
+  .maybeSingle();
 
+if (dono?.telefone) {
+  await sendText(
+    dono.telefone,
+    `📩 Nova pessoa aceitou sua campanha\n\n` +
+      `📌 Missão: ${missao.titulo}\n` +
+      `👤 Executor: ${user.nome || "Usuário"}\n` +
+      `📱 Telefone: ${user.telefone}\n` +
+      `💰 Valor por pessoa: R$ ${money(getValorRecompensa(missao))}\n` +
+      `👥 Vagas restantes: ${Math.max(0, total - novasOcupadas)}`
+  );
+}
     const { error: interessadoError } = await supabase
       .from("missoes_interessados")
       .upsert(
@@ -1169,7 +1318,7 @@ if (user.etapa === "missao_resumo_campanha") {
       .from("missoes_interessados")
       .select("id,usuario_id,status")
       .eq("missao_id", missaoId)
-      .eq("status", "interessado")
+      .in("status", ["interessado", "aceito", "em_andamento", "concluida"])
       .limit(10);
 
     if (!interessados?.length) {
