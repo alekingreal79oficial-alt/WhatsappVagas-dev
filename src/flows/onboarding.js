@@ -47,6 +47,31 @@ function isValidCPF(cpf = "") {
 
   return secondDigit === Number(cpf[10]);
 }
+function cleanCNPJ(cnpj = "") {
+  return String(cnpj).replace(/\D/g, "");
+}
+
+function isValidCNPJ(cnpj = "") {
+  cnpj = cleanCNPJ(cnpj);
+
+  if (!cnpj || cnpj.length !== 14) return false;
+  if (/^(\d)\1+$/.test(cnpj)) return false;
+
+  const calcDigit = (base, weights) => {
+    let sum = 0;
+    for (let i = 0; i < weights.length; i++) {
+      sum += Number(base[i]) * weights[i];
+    }
+
+    const rest = sum % 11;
+    return rest < 2 ? 0 : 11 - rest;
+  };
+
+  const d1 = calcDigit(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  const d2 = calcDigit(cnpj.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+
+  return d1 === Number(cnpj[12]) && d2 === Number(cnpj[13]);
+}
 
 function shortTitle(value = "") {
   const text = String(value || "").trim();
@@ -199,12 +224,15 @@ export async function handleOnboarding({
     if (text === "tipo_empresa") tipo = "empresa";
 
     await updateUser({
-      tipo,
-      etapa: "nome",
-      onboarding_finalizado: false,
-    });
+  email: text.trim().toLowerCase(),
+  etapa: user.tipo === "empresa" ? "cnpj" : "cpf",
+});
 
-    return sendText(phone, "Qual seu nome e sobrenome?");
+if (user.tipo === "empresa") {
+  return sendText(phone, "Digite o CNPJ da empresa:");
+}
+
+return sendText(phone, "Digite seu CPF (apenas números):");
   }
 
   if (user.etapa === "nome") {
@@ -312,7 +340,23 @@ export async function handleOnboarding({
 
     return sendText(phone, "Digite seu CPF (apenas números):");
   }
+if (user.etapa === "cnpj") {
+  const cnpjLimpo = cleanCNPJ(text);
 
+  if (!isValidCNPJ(cnpjLimpo)) {
+    return sendText(
+      phone,
+      "CNPJ inválido. Digite um CNPJ válido.\nEx: 12345678000195"
+    );
+  }
+
+  await updateUser({
+    cnpj: cnpjLimpo,
+    etapa: "nome_empresa",
+  });
+
+  return sendText(phone, "Qual o nome da empresa?");
+}
   if (user.etapa === "cpf") {
     const cpfLimpo = cleanCPF(text);
 
