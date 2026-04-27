@@ -781,71 +781,72 @@ if (missao.usuario_id === user.id && !allowSelfMissionTest) {
   }
 
   const tipo = missao.tipo || "individual";
+if (tipo === "campanha") {
+  const total = Number(missao.vagas_total || 1);
+  const ocupadas = Number(missao.vagas_ocupadas || 0);
 
-  if (tipo === "campanha") {
-    const total = Number(missao.vagas_total || 1);
-    const ocupadas = Number(missao.vagas_ocupadas || 0);
+  if (ocupadas >= total) {
+    return sendText(phone, "Essa campanha já atingiu o limite de participantes.");
+  }
 
-    if (ocupadas >= total) {
-      return sendText(phone, "Essa campanha já atingiu o limite de participantes.");
-    }
-const { data: dono } = await supabase
-  .from("usuarios")
-  .select("id,nome,telefone")
-  .eq("id", missao.usuario_id)
-  .maybeSingle();
+  const novasOcupadas = ocupadas + 1;
+  const novoStatus = novasOcupadas >= total ? "encerrada" : "aberta";
 
-if (dono?.telefone) {
-  await sendText(
-    dono.telefone,
-    `📩 Nova pessoa aceitou sua campanha\n\n` +
-      `📌 Missão: ${missao.titulo}\n` +
-      `👤 Executor: ${user.nome || "Usuário"}\n` +
-      `📱 Telefone: ${user.telefone}\n` +
-      `💰 Valor por pessoa: R$ ${money(getValorRecompensa(missao))}\n` +
-      `👥 Vagas restantes: ${Math.max(0, total - novasOcupadas)}`
-  );
-}
-    const { error: interessadoError } = await supabase
-      .from("missoes_interessados")
-      .upsert(
-        {
-          missao_id: missao.id,
-          usuario_id: user.id,
-          status: "aceito",
-        },
-        { onConflict: "missao_id,usuario_id" }
-      );
-
-    if (interessadoError) {
-      console.error("❌ erro ao aceitar campanha:", interessadoError);
-      return sendText(phone, "Erro ao aceitar missão.");
-    }
-
-    const novasOcupadas = ocupadas + 1;
-    const novoStatus = novasOcupadas >= total ? "encerrada" : "aberta";
-
-    await supabase
-      .from("missoes")
-      .update({
-        vagas_ocupadas: novasOcupadas,
-        status: novoStatus,
-      })
-      .eq("id", missao.id);
-
-    await sendText(
-      phone,
-      `✅ Você aceitou essa missão!\n\n` +
-        `💰 Ao concluir e ser aprovado, você recebe: R$ ${money(getValorRecompensa(missao))}\n` +
-        `👥 Vagas restantes: ${Math.max(0, total - novasOcupadas)}`
+  const { error: interessadoError } = await supabase
+    .from("missoes_interessados")
+    .upsert(
+      {
+        missao_id: missao.id,
+        usuario_id: user.id,
+        status: "aceito",
+      },
+      { onConflict: "missao_id,usuario_id" }
     );
 
-    return sendActionButtons(phone, "Quando concluir:", [
-      { id: `missao_executor_concluir_${missao.id}`, title: "Marcar concluída" },
-      { id: "user_ver_missoes", title: "Ver missões" },
-      { id: "voltar_menu", title: "Voltar ao menu" },
-    ]);
+  if (interessadoError) {
+    console.error("❌ erro ao aceitar campanha:", interessadoError);
+    return sendText(phone, "Erro ao aceitar missão.");
   }
+
+  await supabase
+    .from("missoes")
+    .update({
+      vagas_ocupadas: novasOcupadas,
+      status: novoStatus,
+    })
+    .eq("id", missao.id);
+
+  const { data: dono } = await supabase
+    .from("usuarios")
+    .select("id,nome,telefone")
+    .eq("id", missao.usuario_id)
+    .maybeSingle();
+
+  if (dono?.telefone) {
+    await sendText(
+      dono.telefone,
+      `📩 Nova pessoa aceitou sua campanha\n\n` +
+        `📌 Missão: ${missao.titulo}\n` +
+        `👤 Executor: ${user.nome || "Usuário"}\n` +
+        `📱 Telefone: ${user.telefone}\n` +
+        `💰 Valor por pessoa: R$ ${money(getValorRecompensa(missao))}\n` +
+        `👥 Vagas restantes: ${Math.max(0, total - novasOcupadas)}`
+    );
+  }
+
+  await sendText(
+    phone,
+    `✅ Você aceitou essa missão!\n\n` +
+      `💰 Ao concluir e ser aprovado, você recebe: R$ ${money(getValorRecompensa(missao))}\n` +
+      `👥 Vagas restantes: ${Math.max(0, total - novasOcupadas)}`
+  );
+
+  return sendActionButtons(phone, "Quando concluir:", [
+    { id: `missao_executor_concluir_${missao.id}`, title: "Marcar concluída" },
+    { id: "user_ver_missoes", title: "Ver missões" },
+    { id: "voltar_menu", title: "Voltar ao menu" },
+  ]);
+}
 
   const { error: interessadoError } = await supabase
     .from("missoes_interessados")
