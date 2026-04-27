@@ -373,7 +373,7 @@ function getJobPackageDetails(packageId) {
     },
 
     job_service_highlight_30d: {
-      titulo: "Destaque profissional por 30 dias",
+      titulo: "Destaque 30 dias",
       valor: 19.9,
       descricao:
         "Seu perfil profissional ficará em destaque por 30 dias, aparecendo com prioridade nas buscas da sua área.",
