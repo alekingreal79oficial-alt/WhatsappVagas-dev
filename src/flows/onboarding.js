@@ -214,26 +214,24 @@ export async function handleOnboarding({
   updateUser,
 
 }) {
+
   if (user.etapa === "tipo") {
-    if (!["tipo_usuario", "tipo_contratante", "tipo_empresa"].includes(text)) {
-      return false;
-    }
-
-    let tipo = "usuario";
-    if (text === "tipo_contratante") tipo = "contratante";
-    if (text === "tipo_empresa") tipo = "empresa";
-
-    await updateUser({
-  email: text.trim().toLowerCase(),
-  etapa: user.tipo === "empresa" ? "cnpj" : "cpf",
-});
-
-if (user.tipo === "empresa") {
-  return sendText(phone, "Digite o CNPJ da empresa:");
-}
-
-return sendText(phone, "Digite seu CPF (apenas números):");
+  if (!["tipo_usuario", "tipo_contratante", "tipo_empresa"].includes(text)) {
+    return false;
   }
+
+  let tipo = "usuario";
+  if (text === "tipo_contratante") tipo = "contratante";
+  if (text === "tipo_empresa") tipo = "empresa";
+
+  await updateUser({
+    tipo,
+    etapa: "nome",
+    onboarding_finalizado: false,
+  });
+
+  return sendText(phone, "Qual seu nome e sobrenome?");
+}
 
   if (user.etapa === "nome") {
     if (!text || text.length < 3) {
@@ -329,17 +327,26 @@ return sendText(phone, "Digite seu CPF (apenas números):");
   }
 
   if (user.etapa === "email") {
-    if (!isValidEmail(text)) {
-      return sendText(phone, "Digite um e-mail válido.\nEx: nome@email.com");
-    }
+  if (!isValidEmail(text)) {
+    return sendText(phone, "Digite um e-mail válido.\nEx: nome@email.com");
+  }
 
+  if (user.tipo === "empresa") {
     await updateUser({
       email: text.trim().toLowerCase(),
-      etapa: "cpf",
+      etapa: "cnpj",
     });
 
-    return sendText(phone, "Digite seu CPF (apenas números):");
+    return sendText(phone, "Digite o CNPJ da empresa:");
   }
+
+  await updateUser({
+    email: text.trim().toLowerCase(),
+    etapa: "cpf",
+  });
+
+  return sendText(phone, "Digite seu CPF (apenas números):");
+}
 if (user.etapa === "cnpj") {
   const cnpjLimpo = cleanCNPJ(text);
 
@@ -371,13 +378,7 @@ if (user.etapa === "cnpj") {
       cpf: cpfLimpo,
     });
 
-    if (user.tipo === "empresa") {
-      await updateUser({
-        etapa: "nome_empresa",
-      });
-
-      return sendText(phone, "Qual o nome da empresa?");
-    }
+    
 
     if (user.tipo === "contratante") {
       await updateUser({
