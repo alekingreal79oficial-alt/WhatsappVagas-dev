@@ -70,6 +70,16 @@ function money(value = 0) {
 
 function getValorRecompensa(missao) {
   return Number(missao.valor_por_pessoa || missao.valor || 0);
+}function getValorBrutoRecompensa(missao) {
+  return Number(missao.valor_por_pessoa || missao.valor || 0);
+}
+
+function getTaxaExecutor(missao) {
+  return getValorBrutoRecompensa(missao) * 0.1;
+}
+
+function getValorRecompensa(missao) {
+  return getValorBrutoRecompensa(missao) - getTaxaExecutor(missao);
 }
 
 function getVagasRestantes(missao) {
@@ -100,9 +110,151 @@ async function ensureCarteira(supabase, usuarioId) {
 
   return data;
 }
+async function atualizarCarteiraValores({ supabase, usuarioId, saldoDelta = 0, pendenteDelta = 0 }) {
+  const carteira = await ensureCarteira(supabase, usuarioId);
+  if (!carteira) return false;
 
+  const novoSaldo = Math.max(0, Number(carteira.saldo || 0) + Number(saldoDelta || 0));
+  const novoPendente = Math.max(
+    0,
+    Number(carteira.saldo_pendente || 0) + Number(pendenteDelta || 0)
+  );
+
+  const { error } = await supabase
+    .from("carteiras")
+    .update({
+      saldo: novoSaldo,
+      saldo_pendente: novoPendente,
+    })
+    .eq("usuario_id", usuarioId);
+
+  if (error) {
+    console.error("❌ erro ao atualizar carteira:", error);
+    return false;
+  }
+
+  return true;
+}
+
+function getValorTotalMissao(missao) {
+  return Number(missao.valor_total || missao.valor || 0);
+}
+
+function getTaxaMissao(missao) {
+  return Number(missao.taxa_plataforma || 0);
+}
+
+function getUrgenciaMissao(missao) {
+  return missao.urgencia ? 4.9 : 0;
+}
+
+async function reterTaxaMissaoSePrimeiroAceite({ supabase, missao }) {
+  if (missao.taxa_retida) return true;
+
+  const taxa = getTaxaMissao(missao) + getUrgenciaMissao(missao);
+  if (taxa <= 0) {
+    await supabase.from("missoes").update({ taxa_retida: true }).eq("id", missao.id);
+    return true;
+  }
+
+  await atualizarCarteiraValores({
+    supabase,
+    usuarioId: missao.usuario_id,
+    saldoDelta: 0,
+    pendenteDelta: -taxa,
+  });
+
+  await supabase.from("transacoes").insert({
+    usuario_id: missao.usuario_id,
+    tipo: "debito",
+    valor: taxa,
+    descricao: `Taxa retida da missão: ${missao.titulo}`,
+    status: "concluido",
+    referencia_tipo: "taxa_missao",
+    referencia_id: missao.id,
+  });
+
+  await supabase.from("missoes").update({ taxa_retida: true }).eq("id", missao.id);
+
+  return true;
+}
+
+async function descontarReservaDoDono({ supabase, missao }) {
+  const valorBruto = getValorBrutoRecompensa(missao);
+
+  await atualizarCarteiraValores({
+    supabase,
+    usuarioId: missao.usuario_id,
+    saldoDelta: 0,
+    pendenteDelta: -valorBruto,
+  });
+
+  await supabase.from("transacoes").insert({
+    usuario_id: missao.usuario_id,
+    tipo: "debito",
+    valor: valorBruto,
+    descricao: `Pagamento bruto liberado para executor: ${missao.titulo}`,
+    status: "concluido",
+    referencia_tipo: "pagamento_executor",
+    referencia_id: missao.id,
+  });
+
+  return true;
+}
+
+async function devolverSaldoMissaoCancelada({ supabase, missao }) {
+  const totalMissao = getValorTotalMissao(missao);
+  const taxa = getTaxaMissao(missao) + getUrgenciaMissao(missao);
+  const houveAceite = Number(missao.vagas_ocupadas || 0) > 0 || missao.taxa_retida;
+
+  const { data: creditosPagos } = await supabase
+    .from("transacoes")
+    .select("valor")
+    .eq("referencia_tipo", "missao")
+    .eq("referencia_id", missao.id)
+    .eq("tipo", "credito")
+    .eq("status", "concluido");
+
+  const totalJaPago = (creditosPagos || []).reduce(
+    (acc, item) => acc + Number(item.valor || 0),
+    0
+  );
+
+  const valorLivreDaMissao = Math.max(0, totalMissao - totalJaPago);
+  const valorDevolver = houveAceite ? valorLivreDaMissao : valorLivreDaMissao + taxa;
+  const pendenteBaixar = houveAceite ? valorLivreDaMissao : valorLivreDaMissao + taxa;
+
+  if (valorDevolver > 0) {
+    await atualizarCarteiraValores({
+      supabase,
+      usuarioId: missao.usuario_id,
+      saldoDelta: valorDevolver,
+      pendenteDelta: -pendenteBaixar,
+    });
+
+    await supabase.from("transacoes").insert({
+      usuario_id: missao.usuario_id,
+      tipo: "credito",
+      valor: valorDevolver,
+      descricao: `Devolução de missão cancelada: ${missao.titulo}`,
+      status: "concluido",
+      referencia_tipo: "cancelamento_missao",
+      referencia_id: missao.id,
+    });
+  }
+
+  return {
+    valorDevolver,
+    taxaRetida: houveAceite ? taxa : 0,
+  };
+}
 async function creditarMissaoNaCarteira({ supabase, usuarioId, missao }) {
-  const valor = getValorRecompensa(missao);
+  const valorBruto = getValorBrutoRecompensa(missao);
+  const taxaExecutor = getTaxaExecutor(missao);
+  const valorLiquido = getValorRecompensa(missao);
+
+  const carteira = await ensureCarteira(supabase, usuarioId);
+  if (!carteira) return false;
 
   const { data: jaExiste } = await supabase
     .from("transacoes")
@@ -112,36 +264,51 @@ async function creditarMissaoNaCarteira({ supabase, usuarioId, missao }) {
     .eq("referencia_id", missao.id)
     .maybeSingle();
 
-  if (jaExiste) return false;
-
-  const carteira = await ensureCarteira(supabase, usuarioId);
-  if (!carteira) return false;
-
-  const novoSaldo = Number(carteira.saldo || 0) + valor;
-
-  const { error: carteiraError } = await supabase
-    .from("carteiras")
-    .update({ saldo: novoSaldo })
-    .eq("usuario_id", usuarioId);
-
-  if (carteiraError) {
-    console.error("❌ erro ao creditar carteira:", carteiraError);
+  if (jaExiste) {
+    console.log("⚠️ já creditado antes");
     return false;
   }
 
-  await supabase.from("transacoes").insert({
-    usuario_id: usuarioId,
-    tipo: "credito",
-    valor,
-    descricao: `Recompensa da missão: ${missao.titulo}`,
-    status: "concluido",
-    referencia_tipo: "missao",
-    referencia_id: missao.id,
+  const { error: updateError } = await supabase.rpc("incrementar_saldo", {
+    uid: usuarioId,
+    valor_add: valorLiquido,
+  });
+
+  if (updateError) {
+    console.error("❌ erro ao atualizar saldo:", updateError);
+    return false;
+  }
+
+  await supabase.from("transacoes").insert([
+    {
+      usuario_id: usuarioId,
+      tipo: "credito",
+      valor: valorLiquido,
+      descricao: `Recompensa líquida da missão: ${missao.titulo}`,
+      status: "concluido",
+      referencia_tipo: "missao",
+      referencia_id: missao.id,
+    },
+    {
+      usuario_id: usuarioId,
+      tipo: "debito",
+      valor: taxaExecutor,
+      descricao: `Taxa da plataforma sobre missão: ${missao.titulo}`,
+      status: "concluido",
+      referencia_tipo: "taxa_executor_missao",
+      referencia_id: missao.id,
+    },
+  ]);
+
+  console.log("✅ missão creditada com taxa do executor:", {
+    usuarioId,
+    valorBruto,
+    taxaExecutor,
+    valorLiquido,
   });
 
   return true;
 }
-
 async function enviarResumoCarteira(supabase, phone, user) {
   const carteira = await ensureCarteira(supabase, user.id);
 
@@ -781,6 +948,10 @@ if (missao.usuario_id === user.id && !allowSelfMissionTest) {
   }
 
   const tipo = missao.tipo || "individual";
+  await reterTaxaMissaoSePrimeiroAceite({
+  supabase,
+  missao,
+});
 if (tipo === "campanha") {
   const total = Number(missao.vagas_total || 1);
   const ocupadas = Number(missao.vagas_ocupadas || 0);
@@ -1399,25 +1570,31 @@ if (user.etapa === "missao_resumo_campanha") {
       await updateUser({ etapa: "menu" });
       return sendText(phone, "Missão não encontrada.");
     }
+const devolucao = await devolverSaldoMissaoCancelada({
+  supabase,
+  missao,
+});
 
-    await supabase
-      .from("missoes")
-      .update({
-        status: "cancelada",
-        motivo_cancelamento: text,
-        cancelada_em: new Date().toISOString(),
-      })
-      .eq("id", missaoId);
+await supabase
+  .from("missoes")
+  .update({
+    status: "cancelada",
+    motivo_cancelamento: text,
+    cancelada_em: new Date().toISOString(),
+  })
+  .eq("id", missaoId);
 
     await updateUser({
       etapa: "menu",
       missao_cancelamento_motivo_temp: null,
     });
 
-    return sendText(
-      phone,
-      "✅ Missão cancelada.\nA taxa da plataforma permanece retida, sem devolução."
-    );
+   return sendText(
+  phone,
+  `✅ Missão cancelada.\n\n` +
+    `💰 Valor devolvido para sua carteira: R$ ${money(devolucao.valorDevolver)}\n` +
+    `🧾 Taxa retida: R$ ${money(devolucao.taxaRetida)}`
+);
   }
 
   // =====================
@@ -1551,7 +1728,10 @@ if (user.etapa === "missao_resumo_campanha") {
     usuarioId: executorId,
     missao,
   });
-
+await descontarReservaDoDono({
+  supabase,
+  missao,
+});
   const { data: executor } = await supabase
     .from("usuarios")
     .select("id,telefone,nome")
@@ -1562,7 +1742,9 @@ if (user.etapa === "missao_resumo_campanha") {
     await sendText(
       executor.telefone,
       `🎉 *Missão aprovada!*\n\n` +
-        `Você ganhou *R$ ${money(getValorRecompensa(missao))}* pela missão:\n` +
+        `Valor bruto: R$ ${money(getValorBrutoRecompensa(missao))}\n` +
+`Taxa da plataforma: R$ ${money(getTaxaExecutor(missao))}\n` +
+`Você recebeu: *R$ ${money(getValorRecompensa(missao))}*\n\n` +
         `📌 ${missao.titulo}`
     );
 
@@ -1581,7 +1763,9 @@ if (user.etapa === "missao_resumo_campanha") {
   return sendText(
     phone,
     `✅ Conclusão confirmada.\n\n` +
-      `💰 Valor liberado: R$ ${money(getValorRecompensa(missao))}\n` +
+      `💰 Valor bruto liberado: R$ ${money(getValorBrutoRecompensa(missao))}\n` +
+`🧾 Taxa do executor: R$ ${money(getTaxaExecutor(missao))}\n` +
+`👤 Executor recebeu: R$ ${money(getValorRecompensa(missao))}\n` +
       `👥 Vagas restantes: ${getVagasRestantes(missaoAtualizada || missao)}`
   );
 }

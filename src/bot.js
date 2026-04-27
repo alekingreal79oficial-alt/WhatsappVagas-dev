@@ -299,19 +299,30 @@ if (isAdmin) {
     // =====================
 
     if (user.tipo === "empresa") {
-      const company = await handleCompanyMenu({
-        user,
-        text,
-        phone,
-        supabase,
-        updateUser,
-        getCategorias,
-        getCategoriasPorGrupos,
-      });
-      if (company) return company;
+  const company = await handleCompanyMenu({
+    user,
+    text,
+    phone,
+    supabase,
+    updateUser,
+    getCategorias,
+    getCategoriasPorGrupos,
+  });
 
-      return handleCompanyFallback(phone);
-    }
+  if (company) return company;
+
+  const missions = await handleMissions({
+    user,
+    text,
+    phone,
+    supabase,
+    updateUser,
+  });
+
+  if (missions) return missions;
+
+  return handleCompanyFallback(phone);
+}
 
     return sendRootMenu(phone);
   } catch (err) {

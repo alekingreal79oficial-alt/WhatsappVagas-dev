@@ -78,7 +78,56 @@ async function buscarVagasParaUsuario(supabase, user, limit = 30) {
 
   return { vagas: data || [], error: null };
 }
+async function buscarTodasVagasAtivas(supabase, limit = 50) {
+  const { data, error } = await supabase
+    .from("vagas")
+    .select("*")
+    .eq("status", "ativa")
+    .order("created_at", { ascending: false })
+    .limit(limit);
 
+  if (error) {
+    console.error("❌ erro ao buscar todas as vagas:", error);
+    return { vagas: [], error };
+  }
+
+  return { vagas: data || [], error: null };
+}
+
+function temUnlockVagas24h(user) {
+  if (!user?.vagas_unlock_ate) return false;
+  return new Date(user.vagas_unlock_ate) > new Date();
+}
+
+function buildTodasVagasPreview(vagas = []) {
+  if (!vagas.length) return "Sem vagas disponíveis no momento.";
+
+  const preview = vagas.slice(0, 5);
+  const restante = Math.max(0, vagas.length - preview.length);
+
+  let out = "🌍 *Vagas disponíveis no RendaJá agora:*\n";
+
+  preview.forEach((vaga) => {
+    out +=
+      `\n\n• *${vaga.titulo || "Vaga"}*` +
+      `\n🏢 ${vaga.nome_empresa || "Empresa não informada"}` +
+      `\n📍 ${vaga.cidade || "Sem cidade"}${vaga.estado ? `/${vaga.estado}` : ""}` +
+      `\n💰 ${vaga.salario || "A combinar"}`;
+  });
+
+  if (restante > 0) {
+    out += `\n\n🔒 Existem mais *${restante} vaga(s)* ocultas.`;
+  }
+
+  out +=
+    "\n\n💡 Ao desbloquear, você poderá:" +
+    "\n• Ver a lista completa" +
+    "\n• Abrir os detalhes das vagas" +
+    "\n• Acessar o WhatsApp da empresa" +
+    "\n• Enviar seu currículo diretamente";
+
+  return out;
+}
 function formatTipoContratacao(tipo = "") {
   const map = {
     clt: "CLT",
@@ -205,6 +254,15 @@ function getJobPackageDetails(packageId) {
       backId: "jobs_pacotes",
       backTitle: "Ver pacotes",
     },
+    jobs_unlock_lista: {
+  titulo: "Desbloqueio geral de vagas por 24h",
+  valor: 4.9,
+  descricao:
+    "Libera por 24h a lista geral de vagas do RendaJá. Você poderá ver os detalhes das vagas e acessar o WhatsApp da empresa para enviar seu currículo diretamente.",
+  confirmId: "confirm_jobs_unlock_lista",
+  backId: "user_explorar_vagas",
+  backTitle: "Explorar vagas",
+},
     missoes_buy_single: {
       titulo: "Desbloqueio de missões",
       valor: 4.9,
@@ -970,33 +1028,90 @@ if (user.etapa === "prof_criar_perfil_preco") {
   // VER VAGAS
   // =====================
 
-  if (text === "user_ver_vagas") {
-    const paidAccess = await hasPaidAccessForJobs(supabase, user.id);
-    const { vagas, error } = await buscarVagasParaUsuario(supabase, user, 30);
+if (text === "user_ver_vagas" || text === "user_ver_vagas_categoria") {
+  const { vagas, error } = await buscarVagasParaUsuario(supabase, user, 30);
 
-    if (error) {
-      await sendText(phone, "Erro ao buscar vagas.");
-      return sendActionButtons(phone, "O que deseja fazer agora?", [
-        { id: "voltar_menu", title: "Voltar ao menu" },
-      ]);
-    }
+  if (error) {
+    await sendText(phone, "Erro ao buscar vagas.");
+    return sendActionButtons(phone, "O que deseja fazer agora?", [
+      { id: "voltar_menu", title: "Voltar ao menu" },
+    ]);
+  }
 
-    if (!vagas.length) {
-      await sendText(phone, "Sem vagas no momento para seu perfil.");
-      return sendActionButtons(phone, "O que deseja fazer agora?", [
-        { id: "jobs_pacotes", title: "Ver pacotes" },
-        { id: "voltar_menu", title: "Voltar ao menu" },
-      ]);
-    }
+  if (!vagas.length) {
+    await sendText(
+      phone,
+      "No momento não encontrei vagas na sua área específica."
+    );
 
-    if (paidAccess) {
+    return sendActionButtons(phone, "Você pode tentar:", [
+      { id: "user_explorar_vagas", title: "Explorar vagas" },
+      { id: "jobs_pacotes", title: "Receber alertas" },
+      { id: "voltar_menu", title: "Voltar ao menu" },
+    ]);
+  }
+
   await sendText(
     phone,
-    `✅ *Seu acesso está liberado.*\n\n` +
-      `Encontramos *${vagas.length}* vaga(s) para o seu perfil.`
+    `✅ Encontramos *${vagas.length}* vaga(s) na sua área.`
   );
 
   return sendJobsUnlockedList(phone, vagas);
+}
+
+if (text === "user_explorar_vagas") {
+  const { vagas, error } = await buscarTodasVagasAtivas(supabase, 50);
+
+  if (error) {
+    await sendText(phone, "Erro ao buscar vagas.");
+    return sendActionButtons(phone, "O que deseja fazer agora?", [
+      { id: "voltar_menu", title: "Voltar ao menu" },
+    ]);
+  }
+
+  if (!vagas.length) {
+    return sendText(phone, "Sem vagas disponíveis no momento.");
+  }
+
+  if (temUnlockVagas24h(user)) {
+    await sendText(
+      phone,
+      `✅ Seu acesso geral está liberado.\n\nEncontramos *${vagas.length}* vaga(s).`
+    );
+
+    return sendJobsUnlockedList(phone, vagas);
+  }
+
+  await sendText(phone, buildTodasVagasPreview(vagas));
+
+  return sendActionButtons(phone, "O que deseja fazer?", [
+    { id: "jobs_unlock_lista", title: "Desbloquear 24h" },
+    { id: "jobs_pacotes", title: "Receber alertas" },
+    { id: "voltar_menu", title: "Voltar ao menu" },
+  ]);
+}
+
+if (text === "jobs_unlock_lista") {
+  return explicarPacoteAntesDoPagamento(phone, "jobs_unlock_lista");
+}
+
+if (text === "confirm_jobs_unlock_lista") {
+  return gerarPagamentoPix({
+    supabase,
+    phone,
+    user,
+    planoCodigo: "vaga_avulsa_usuario",
+    referenciaTipo: "usuario_vagas_avulso_24h",
+    tituloPlano: "Desbloqueio geral de vagas por 24h",
+    valorFinal: 4.9,
+    metadataExtra: {
+      modo: "desbloqueio_geral_vagas_24h",
+    },
+    afterSuccessLabel:
+      "Assim que o pagamento for aprovado, você terá 24h para ver todas as vagas e acessar o WhatsApp das empresas.",
+    backActionId: "user_explorar_vagas",
+    backActionTitle: "Explorar vagas",
+  });
 }
 
     await sendText(phone, buildJobsPreviewLocked(vagas));
@@ -1536,7 +1651,7 @@ if (text === "jobs_buy_week_plus2") {
 }
 
   return false;
-}
+
 
 export async function handleUserFallback(phone) {
   return sendMenuUsuario(phone);
