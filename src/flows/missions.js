@@ -627,24 +627,32 @@ const { data: missao, error } = await supabase
   }
 
   if (text.startsWith("missao_aceitar_")) {
-    const missaoId = text.replace("missao_aceitar_", "");
+  const missaoId = text.replace("missao_aceitar_", "");
 
-    const { data: missao, error } = await supabase
-      .from("missoes")
-      .select("*")
-      .eq("id", missaoId)
-      .maybeSingle();
+  const { data: missao, error } = await supabase
+    .from("missoes")
+    .select("*")
+    .eq("id", missaoId)
+    .maybeSingle();
 
-    if (error || !missao) {
-      return sendText(phone, "Missão não encontrada.");
-    }
+  if (error || !missao) return sendText(phone, "Missão não encontrada.");
 
-    if (missao.usuario_id === user.id) {
-      return sendText(phone, "Você não pode aceitar a própria missão.");
-    }
+  if (missao.usuario_id === user.id) {
+    return sendText(phone, "Você não pode aceitar a própria missão.");
+  }
 
-    if (missao.status !== "aberta") {
-      return sendText(phone, "Essa missão não está mais disponível.");
+  if (missao.status !== "aberta") {
+    return sendText(phone, "Essa missão não está mais disponível.");
+  }
+
+  const tipo = missao.tipo || "individual";
+
+  if (tipo === "campanha") {
+    const total = Number(missao.vagas_total || 1);
+    const ocupadas = Number(missao.vagas_ocupadas || 0);
+
+    if (ocupadas >= total) {
+      return sendText(phone, "Essa campanha já atingiu o limite de participantes.");
     }
 
     const { error: interessadoError } = await supabase
@@ -653,46 +661,79 @@ const { data: missao, error } = await supabase
         {
           missao_id: missao.id,
           usuario_id: user.id,
-          status: "interessado",
+          status: "aceito",
         },
         { onConflict: "missao_id,usuario_id" }
       );
 
     if (interessadoError) {
-      console.error("❌ erro ao registrar interessado:", interessadoError);
-      return sendText(phone, "Erro ao registrar interesse na missão.");
+      console.error("❌ erro ao aceitar campanha:", interessadoError);
+      return sendText(phone, "Erro ao aceitar missão.");
     }
+
+    const novasOcupadas = ocupadas + 1;
+    const novoStatus = novasOcupadas >= total ? "encerrada" : "aberta";
 
     await supabase
       .from("missoes")
-      .update({ status: "aguardando_aprovacao_dono" })
-      .eq("id", missao.id)
-      .eq("status", "aberta");
-
-    const { data: dono } = await supabase
-      .from("usuarios")
-      .select("id,nome,telefone")
-      .eq("id", missao.usuario_id)
-      .maybeSingle();
-
-    if (dono?.telefone) {
-      await enviarMissaoParaDono(dono.telefone, missao, {
-        id: user.id,
-        nome: user.nome,
-        telefone: user.telefone,
-      });
-    }
+      .update({
+        vagas_ocupadas: novasOcupadas,
+        status: novoStatus,
+      })
+      .eq("id", missao.id);
 
     await sendText(
       phone,
-      `✅ Seu interesse foi registrado com sucesso.\n\nAgora você já pode conversar com o dono da missão pelo número abaixo:\n${dono?.telefone || "Telefone indisponível"}`
+      `✅ Você aceitou essa missão!\n\n` +
+        `💰 Ao concluir e ser aprovado, você recebe: R$ ${money(getValorRecompensa(missao))}\n` +
+        `👥 Vagas restantes: ${Math.max(0, total - novasOcupadas)}`
     );
 
-    return sendActionButtons(phone, "O que deseja fazer agora?", [
+    return sendActionButtons(phone, "Quando concluir:", [
+      { id: `missao_executor_concluir_${missao.id}`, title: "Marcar concluída" },
       { id: "user_ver_missoes", title: "Ver missões" },
       { id: "voltar_menu", title: "Voltar ao menu" },
     ]);
   }
+
+  const { error: interessadoError } = await supabase
+    .from("missoes_interessados")
+    .upsert(
+      {
+        missao_id: missao.id,
+        usuario_id: user.id,
+        status: "interessado",
+      },
+      { onConflict: "missao_id,usuario_id" }
+    );
+
+  if (interessadoError) {
+    console.error("❌ erro ao registrar interessado:", interessadoError);
+    return sendText(phone, "Erro ao registrar interesse na missão.");
+  }
+
+  await supabase
+    .from("missoes")
+    .update({ status: "aguardando_aprovacao_dono" })
+    .eq("id", missao.id)
+    .eq("status", "aberta");
+
+  const { data: dono } = await supabase
+    .from("usuarios")
+    .select("id,nome,telefone")
+    .eq("id", missao.usuario_id)
+    .maybeSingle();
+
+  if (dono?.telefone) {
+    await enviarMissaoParaDono(dono.telefone, missao, {
+      id: user.id,
+      nome: user.nome,
+      telefone: user.telefone,
+    });
+  }
+
+  return sendText(phone, "✅ Seu interesse foi registrado com sucesso.");
+}
 
   if (text.startsWith("missao_aprovar_")) {
     const parts = text.split("_");
@@ -1232,46 +1273,59 @@ if (user.etapa === "missao_resumo_campanha") {
   // =====================
 
   if (text.startsWith("missao_executor_concluir_")) {
-    const missaoId = text.replace("missao_executor_concluir_", "");
+  const missaoId = text.replace("missao_executor_concluir_", "");
 
-    const { data: missao } = await supabase
-      .from("missoes")
-      .select("*")
-      .eq("id", missaoId)
-      .eq("executor_usuario_id", user.id)
-      .maybeSingle();
+  const { data: missao } = await supabase
+    .from("missoes")
+    .select("*")
+    .eq("id", missaoId)
+    .maybeSingle();
 
-    if (!missao) return sendText(phone, "Missão não encontrada.");
+  if (!missao) return sendText(phone, "Missão não encontrada.");
 
-    await supabase
-      .from("missoes")
-      .update({
-        executor_confirmou_conclusao: true,
-        status: "aguardando_confirmacao_dono",
-      })
-      .eq("id", missaoId);
+  const { data: relacao } = await supabase
+    .from("missoes_interessados")
+    .select("*")
+    .eq("missao_id", missaoId)
+    .eq("usuario_id", user.id)
+    .in("status", ["aceito", "em_andamento"])
+    .maybeSingle();
 
-    const { data: dono } = await supabase
-      .from("usuarios")
-      .select("telefone")
-      .eq("id", missao.usuario_id)
-      .maybeSingle();
-
-    if (dono?.telefone) {
-      await sendActionButtons(
-        dono.telefone,
-        `📦 O executor informou que concluiu a missão "${missao.titulo}".`,
-        [
-          { id: `missao_dono_confirmar_${missao.id}`, title: "Confirmar conclusão" },
-          { id: `missao_dono_negar_${missao.id}`, title: "Ainda não concluiu" },
-          { id: "voltar_menu", title: "Voltar ao menu" },
-        ]
-      );
-    }
-
-    return sendText(phone, "✅ Sua conclusão foi enviada ao dono da missão.");
+  if (!relacao && missao.executor_usuario_id !== user.id) {
+    return sendText(phone, "Essa missão não está vinculada a você.");
   }
 
+  await supabase
+    .from("missoes_interessados")
+    .update({
+      status: "concluida",
+      concluido: true,
+    })
+    .eq("missao_id", missaoId)
+    .eq("usuario_id", user.id);
+
+  const { data: dono } = await supabase
+    .from("usuarios")
+    .select("telefone")
+    .eq("id", missao.usuario_id)
+    .maybeSingle();
+
+  if (dono?.telefone) {
+    await sendActionButtons(
+      dono.telefone,
+      `📦 O executor informou que concluiu a missão "${missao.titulo}".\n\n` +
+        `👤 Executor: ${user.nome || user.telefone}\n` +
+        `💰 Valor a liberar: R$ ${money(getValorRecompensa(missao))}`,
+      [
+        { id: `missao_dono_confirmar_${missao.id}_${user.id}`, title: "Confirmar" },
+        { id: `missao_dono_negar_${missao.id}_${user.id}`, title: "Negar" },
+        { id: "voltar_menu", title: "Voltar" },
+      ]
+    );
+  }
+
+  return sendText(phone, "✅ Sua conclusão foi enviada ao dono da missão.");
+}
   if (text.startsWith("missao_dono_concluir_")) {
     const missaoId = text.replace("missao_dono_concluir_", "");
 
@@ -1314,66 +1368,71 @@ if (user.etapa === "missao_resumo_campanha") {
   }
 
   if (text.startsWith("missao_dono_confirmar_")) {
-    const missaoId = text.replace("missao_dono_confirmar_", "");
+  const parts = text.split("_");
+  const missaoId = parts[3];
+  const executorId = parts[4];
 
-    const { data: missao } = await supabase
-      .from("missoes")
-      .select("*")
-      .eq("id", missaoId)
-      .eq("usuario_id", user.id)
-      .maybeSingle();
+  const { data: missao } = await supabase
+    .from("missoes")
+    .select("*")
+    .eq("id", missaoId)
+    .eq("usuario_id", user.id)
+    .maybeSingle();
 
-    if (!missao) return sendText(phone, "Missão não encontrada.");
+  if (!missao) return sendText(phone, "Missão não encontrada.");
 
-    const novosDados = { dono_confirmou_conclusao: true };
-    const status = missao.executor_confirmou_conclusao
-      ? "concluida"
-      : "aguardando_confirmacao_executor";
+  if (!executorId) return sendText(phone, "Executor não identificado.");
 
-    novosDados.status = status;
-    if (status === "concluida") {
-      novosDados.concluida_em = new Date().toISOString();
-    }
+  await supabase
+    .from("missoes_interessados")
+    .update({
+      status: "concluida",
+      concluido: true,
+      pago: true,
+      pago_em: new Date().toISOString(),
+    })
+    .eq("missao_id", missaoId)
+    .eq("usuario_id", executorId);
 
-    await supabase.from("missoes").update(novosDados).eq("id", missaoId);
-if (status === "concluida") {
-  if (missao.executor_usuario_id) {
-    await creditarMissaoNaCarteira({
-      supabase,
-      usuarioId: missao.executor_usuario_id,
-      missao,
-    });
+  await creditarMissaoNaCarteira({
+    supabase,
+    usuarioId: executorId,
+    missao,
+  });
 
-    const { data: executor } = await supabase
-      .from("usuarios")
-      .select("id,telefone,nome")
-      .eq("id", missao.executor_usuario_id)
-      .maybeSingle();
+  const { data: executor } = await supabase
+    .from("usuarios")
+    .select("id,telefone,nome")
+    .eq("id", executorId)
+    .maybeSingle();
 
-    if (executor?.telefone) {
-      await sendText(
-        executor.telefone,
-        `🎉 *Missão concluída!*\n\n` +
-          `Você ganhou *R$ ${money(getValorRecompensa(missao))}* pela missão:\n` +
-          `📌 ${missao.titulo}`
-      );
+  if (executor?.telefone) {
+    await sendText(
+      executor.telefone,
+      `🎉 *Missão aprovada!*\n\n` +
+        `Você ganhou *R$ ${money(getValorRecompensa(missao))}* pela missão:\n` +
+        `📌 ${missao.titulo}`
+    );
 
-      await sendActionButtons(executor.telefone, "Deseja ver seu saldo?", [
-        { id: "user_carteira", title: "Ver saldo" },
-        { id: "voltar_menu", title: "Voltar ao menu" },
-      ]);
-    }
+    await sendActionButtons(executor.telefone, "Deseja ver seu saldo?", [
+      { id: "user_carteira", title: "Ver saldo" },
+      { id: "voltar_menu", title: "Voltar ao menu" },
+    ]);
   }
+
+  const { data: missaoAtualizada } = await supabase
+    .from("missoes")
+    .select("*")
+    .eq("id", missaoId)
+    .maybeSingle();
 
   return sendText(
     phone,
-    `✅ Missão concluída com sucesso.\n\n` +
-      `👥 Vagas restantes: ${getVagasRestantes(missao)}`
+    `✅ Conclusão confirmada.\n\n` +
+      `💰 Valor liberado: R$ ${money(getValorRecompensa(missao))}\n` +
+      `👥 Vagas restantes: ${getVagasRestantes(missaoAtualizada || missao)}`
   );
 }
-
-    return sendText(phone, "✅ Sua confirmação foi registrada.");
-  }
 
   if (text.startsWith("missao_executor_confirmar_")) {
     const missaoId = text.replace("missao_executor_confirmar_", "");
