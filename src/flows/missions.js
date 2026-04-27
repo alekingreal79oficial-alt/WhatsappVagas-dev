@@ -1151,7 +1151,7 @@ if (tipo === "campanha") {
       missao_valor_temp: null,
     });
 
-    return sendText(phone, "Qual o título da missão?\nEx: Capinar jardim");
+    return sendText(phone, "Qual o título da missão?\nEx: Preciso de alguém para me ajudar com uma tarefa específica.");
   }
 
   if (user.etapa === "missao_titulo") {
