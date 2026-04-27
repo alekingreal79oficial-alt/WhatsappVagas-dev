@@ -3,7 +3,7 @@ import { sendMenuUsuario, sendActionButtons } from "./menus.js";
 import {
   createPendingPayment,
   getPlanoByCodigo,
-  hasPaidAccessForJobs,
+  
 } from "../lib/monetization.js";
 import { createMercadoPagoPixIntent } from "../services/payments.js";
 
@@ -142,53 +142,6 @@ function formatTipoContratacao(tipo = "") {
   return map[tipo] || tipo || "A combinar";
 }
 
-function buildJobsPreviewLocked(vagas = []) {
-  if (!vagas.length) {
-    return "Sem vagas no momento para seu perfil.";
-  }
-
-  const preview = vagas.slice(0, 3);
-  const restante = Math.max(0, vagas.length - preview.length);
-
-  let out = "🔎 *Encontramos vagas para o seu perfil:*\n";
-
-  preview.forEach((vaga) => {
-    out +=
-      `\n\n• *${vaga.titulo || "Vaga"}*` +
-      `\n🏢 ${vaga.nome_empresa || "Empresa não informada"}` +
-      `\n📍 ${vaga.cidade || "Sem cidade"}${vaga.estado ? `/${vaga.estado}` : ""}` +
-      `\n💰 ${vaga.salario || "A combinar"}`;
-  });
-
-  if (restante > 0) {
-    out += `\n\n📌 E ainda existem *mais ${restante} oportunidade(s)* nessa busca.`;
-  }
-out +=
-  "\n\n🔒 Você está vendo apenas as *3 primeiras vagas*." +
-  "\nPara liberar a lista completa desta busca, o desbloqueio é *avulso por R$ 4,90*." +
-  "\n\n📣 Se preferir, você também pode contratar um pacote de oportunidades.";
-  return out;
-}
-
-function buildJobsFull(vagas = []) {
-  if (!vagas.length) {
-    return "Sem vagas no momento para seu perfil.";
-  }
-
-  let out = "💼 *Vagas disponíveis para você:*\n";
-
-  vagas.forEach((vaga) => {
-    out +=
-      `\n\n• *${vaga.titulo || "Vaga"}*` +
-      `\n🏢 ${vaga.nome_empresa || "Empresa não informada"}` +
-      `\n📍 ${vaga.cidade || "Sem cidade"}${vaga.estado ? `/${vaga.estado}` : ""}` +
-      `\n💰 ${vaga.salario || "A combinar"}` +
-      `\n📌 ${formatTipoContratacao(vaga.tipo_contratacao)}` +
-      `\n👥 ${vaga.quantidade_vagas || 1} posição(ões)`;
-  });
-
-  return out;
-}
 function buildJobsDetailsMessage(vaga) {
   if (!vaga) {
     return "Vaga não encontrada.";
@@ -245,15 +198,7 @@ function buildPixCodeOnly(intent) {
 }
 function getJobPackageDetails(packageId) {
   const map = {
-    jobs_buy_single: {
-      titulo: "Desbloqueio da busca atual",
-      valor: 4.9,
-      descricao:
-        "Libera a lista completa da busca que você acabou de fazer. Ideal para ver todas as vagas disponíveis agora, sem assinatura.",
-      confirmId: "confirm_jobs_buy_single",
-      backId: "jobs_pacotes",
-      backTitle: "Ver pacotes",
-    },
+    
     jobs_unlock_lista: {
   titulo: "Desbloqueio geral de vagas por 24h",
   valor: 4.9,
@@ -263,45 +208,7 @@ function getJobPackageDetails(packageId) {
   backId: "user_explorar_vagas",
   backTitle: "Explorar vagas",
 },
-    missoes_buy_single: {
-      titulo: "Desbloqueio de missões",
-      valor: 4.9,
-      descricao:
-        "Libera a lista completa de missões da busca atual. Ideal para ver todos os bicos disponíveis agora, sem assinatura.",
-      confirmId: "confirm_missoes_buy_single",
-      backId: "jobs_pacotes",
-      backTitle: "Ver pacotes",
-    },
-
-    missoes_buy_month: {
-      titulo: "Missões mensais",
-      valor: 19.9,
-      descricao:
-        "Libera o acesso às missões por 30 dias e prepara seu acesso para futuras notificações desse tipo.",
-      confirmId: "confirm_missoes_buy_month",
-      backId: "jobs_pacotes",
-      backTitle: "Ver pacotes",
-    },
-
-    jobs_missions_buy_month: {
-      titulo: "Vagas + Missões mensal",
-      valor: 29.9,
-      descricao:
-        "Libera o acesso a vagas e missões por 30 dias em um pacote combinado.",
-      confirmId: "confirm_jobs_missions_buy_month",
-      backId: "jobs_pacotes",
-      backTitle: "Ver pacotes",
-    },
-
-    jobs_total_buy_month: {
-      titulo: "Plano completo mensal",
-      valor: 39.9,
-      descricao:
-        "Libera vagas, missões e acesso completo por 30 dias em um pacote mais amplo.",
-      confirmId: "confirm_jobs_total_buy_month",
-      backId: "jobs_pacotes",
-      backTitle: "Ver pacotes",
-    },
+    
     jobs_buy_month_base: {
   titulo: "Notificações da minha área",
   valor: 9.9,
@@ -332,15 +239,7 @@ jobs_buy_month_all: {
   backTitle: "Ver pacotes",
 },
 
-    job_service_buy_30d: {
-      titulo: "Perfil profissional por 30 dias",
-      valor: 9.9,
-      descricao:
-        "Seu perfil profissional ficará visível por 30 dias nas buscas de pessoas e empresas que procurarem profissionais da sua área.",
-      confirmId: "confirm_job_service_buy_30d",
-      backId: "prof_pacotes",
-      backTitle: "Ver divulgação",
-    },
+   
 job_service_highlight_7d: {
   titulo: "Destaque 7 dias",
   valor: 9.9,
@@ -480,10 +379,10 @@ async function mostrarPacotesUsuario(phone) {
     {
       title: "Categorias de pacotes",
       rows: [
-        { id: "pacotes_vagas", title: "Pacotes de vagas" },
-        { id: "pacotes_missoes", title: "Pacotes de missões" },
-        { id: "pacotes_combinados", title: "Planos combinados" },
-      ],
+  { id: "pacotes_vagas", title: "Alertas de vagas" },
+  { id: "user_explorar_vagas", title: "Todas as vagas" },
+  { id: "prof_pacotes", title: "Destacar perfil" },
+],
     },
   ]);
 }
@@ -501,29 +400,8 @@ async function mostrarPacotesVagas(phone) {
   ]);
 }
 
-async function mostrarPacotesMissoes(phone) {
-  return sendList(phone, "🛠️ *Pacotes de missões*", [
-    {
-      title: "Missões",
-      rows: [
-        
-        { id: "missoes_buy_month", title: "Missões mensal R$ 19,90" },
-      ],
-    },
-  ]);
-}
 
-async function mostrarPacotesCombinados(phone) {
-  return sendList(phone, "🚀 *Planos combinados*", [
-    {
-      title: "Combos",
-   rows: [
-  { id: "jobs_missions_buy_month", title: "Vagas+Missões R$29,90" },
-  { id: "jobs_total_buy_month", title: "Completo R$39,90" },
-],
-    },
-  ]);
-}
+
 async function mostrarPacotesProfissionais(phone) {
   return sendList(phone, "⭐ *Destaque profissional*", [
     {
@@ -573,8 +451,6 @@ export async function handleJobsMenu({
 
   if (text === "jobs_pacotes") {
   if (
-    user.etapa === "jobs_week_plus2_cat_1" ||
-    user.etapa === "jobs_week_plus2_cat_2" ||
     user.etapa === "jobs_month_plus2_cat_1" ||
     user.etapa === "jobs_month_plus2_cat_2"
   ) {
@@ -592,13 +468,7 @@ if (text === "pacotes_vagas") {
   return mostrarPacotesVagas(phone);
 }
 
-if (text === "pacotes_missoes") {
-  return mostrarPacotesMissoes(phone);
-}
 
-if (text === "pacotes_combinados") {
-  return mostrarPacotesCombinados(phone);
-}
 if (text.startsWith("vaga_ver_")) {
   const vagaId = text.replace("vaga_ver_", "");
 
@@ -710,157 +580,12 @@ if (text === "prof_ver_perfil") {
 
   return sendActionButtons(phone, "O que deseja fazer agora?", [
     { id: "prof_criar_perfil", title: "Editar perfil" },
-    { id: "prof_pacotes", title: "Ver divulgação" },
+    { id: "prof_pacotes", title: "Destacar perfil" },
     { id: "voltar_menu", title: "Voltar ao menu" },
   ]);
 }
 
-if (user.etapa === "jobs_week_plus2_cat_1") {
-  if (text === "jobs_pacotes") {
-    await updateUser({
-      etapa: "menu",
-      categorias_extras_temp: [],
-    });
-    return mostrarPacotesUsuario(phone);
-  }
 
-  if (text === "voltar_menu") {
-    await updateUser({
-      etapa: "menu",
-      categorias_extras_temp: [],
-    });
-    return sendMenuUsuario(phone);
-  }
-
-  if (!text.startsWith("extra_cat1_")) {
-    return sendText(phone, "Escolha a 1ª categoria extra na lista enviada.");
-  }
-
-  const categoriaId1 = text.replace("extra_cat1_", "");
-
-const { data: categoria1, error: categoria1Error } = await supabase
-  .from("categorias")
-  .select("id, chave")
-  .eq("id", categoriaId1)
-  .maybeSingle();
-
-if (categoria1Error || !categoria1?.chave) {
-  await sendText(phone, "Não consegui identificar a categoria escolhida.");
-  return sendActionButtons(phone, "O que deseja fazer agora?", [
-    { id: "jobs_pacotes", title: "Ver pacotes" },
-    { id: "voltar_menu", title: "Voltar ao menu" },
-  ]);
-}
-
-const cat1 = categoria1.chave;
-
-await updateUser({
-  etapa: "jobs_week_plus2_cat_2",
-  categorias_extras_temp: [cat1],
-});
-  const { data: categorias, error } = await supabase
-   .from("categorias")
-.select("id, nome, chave, area_chave, ordem")
-.eq("ativo", true)
-.eq("area_chave", user.area_principal)
-.order("ordem", { ascending: true })
-.order("nome", { ascending: true })
-
-  if (error) {
-    console.error("❌ erro ao buscar 2ª categoria extra semanal:", error);
-    await sendText(phone, "Erro ao carregar a 2ª categoria extra.");
-    return sendActionButtons(phone, "O que deseja fazer agora?", [
-      { id: "jobs_pacotes", title: "Ver notificações" },
-      { id: "voltar_menu", title: "Voltar ao menu" },
-    ]);
-  }
-const categoriasFiltradas = (categorias || []).filter(
-  (c) => c.chave !== user.categoria_principal && c.chave !== cat1
-);
-
-await sendText(
-  phone,
-  `Escolha a 2ª categoria extra:\n\n${buildPreviewList(categoriasFiltradas)}\n\n👇 Toque em "Ver opções" para selecionar.`
-);
-  return sendList(phone, "Escolha a 2ª categoria extra:", [
-  {
-    title: "Categorias",
-  rows: categoriasFiltradas.slice(0, 10).map((c) => ({
-  id: `extra_cat2_${c.id}`,
-  title: shortTitle(c.nome),
-})),
-  },
-]);
-}
-if (user.etapa === "jobs_week_plus2_cat_2") {
-  if (text === "jobs_pacotes") {
-    await updateUser({
-      etapa: "menu",
-      categorias_extras_temp: [],
-    });
-    return mostrarPacotesUsuario(phone);
-  }
-
-  if (text === "voltar_menu") {
-    await updateUser({
-      etapa: "menu",
-      categorias_extras_temp: [],
-    });
-    return sendMenuUsuario(phone);
-  }
-
-  if (!text.startsWith("extra_cat2_")) {
-    return sendText(phone, "Escolha a 2ª categoria extra na lista enviada.");
-  }
-
-  const categoriaId2 = text.replace("extra_cat2_", "");
-
-const { data: categoria2, error: categoria2Error } = await supabase
-  .from("categorias")
-  .select("id, chave")
-  .eq("id", categoriaId2)
-  .maybeSingle();
-
-if (categoria2Error || !categoria2?.chave) {
-  await sendText(phone, "Não consegui identificar a categoria escolhida.");
-  return sendActionButtons(phone, "O que deseja fazer agora?", [
-    { id: "jobs_pacotes", title: "Ver pacotes" },
-    { id: "voltar_menu", title: "Voltar ao menu" },
-  ]);
-}
-
-const cat2 = categoria2.chave;
-const atuais = Array.isArray(user.categorias_extras_temp)
-  ? user.categorias_extras_temp
-  : [];
-
-  const categoriasExtras = Array.from(new Set([...atuais, cat2])).slice(0, 2);
-
-  await updateUser({
-    etapa: "menu",
-    categorias_extras_temp: categoriasExtras,
-  });
-
-  return gerarPagamentoPix({
-    supabase,
-    phone,
-    user: {
-      ...user,
-      categorias_extras_temp: categoriasExtras,
-    },
-    planoCodigo: "vaga_semanal_usuario",
-    referenciaTipo: "usuario_vagas_semanal",
-    tituloPlano: "Notificações semanais - categoria atual + 2 extras",
-    valorFinal: 13.8,
-    metadataExtra: {
-      notificacao_scope: "mais_2",
-      adicional_categorias: 2,
-      categorias_extras: categoriasExtras,
-    },
-    afterSuccessLabel:
-      "Assim que o pagamento for aprovado, suas notificações semanais ficarão liberadas para a categoria atual + 2 categorias extras.",
-  });
-}
 if (user.etapa === "prof_criar_perfil_servico") {
   const servico = String(text || "").trim();
 
@@ -1007,7 +732,7 @@ await sendText(
   return sendActionButtons(phone, "O que deseja fazer agora?", [
     { id: "prof_ver_perfil", title: "Ver meu perfil" },
 
-    { id: "prof_pacotes", title: "Ver divulgação" },
+    { id: "prof_pacotes", title: "Destacar perfil" },
     { id: "voltar_menu", title: "Voltar ao menu" },
   ]);
 }
@@ -1102,107 +827,6 @@ if (text === "confirm_jobs_unlock_lista") {
   });
 }
 
-    
-if (text === "confirm_jobs_buy_single") {
-  return gerarPagamentoPix({
-    supabase,
-    phone,
-    user,
-    planoCodigo: "vaga_avulsa_usuario",
-    referenciaTipo: "usuario_vagas_avulso",
-    tituloPlano: "Desbloqueio da busca atual",
-    valorFinal: 4.9,
-    metadataExtra: {
-      modo: "desbloqueio_busca_vagas",
-      categoria_principal: user.categoria_principal,
-      notificacao_scope: "categoria_atual",
-      categorias_extras: [],
-    },
-    afterSuccessLabel:
-      "Assim que o pagamento for aprovado, a lista completa desta busca ficará liberada.",
-    backActionId: "user_ver_vagas",
-    backActionTitle: "Ver vagas",
-  });
-}
-if (text === "confirm_missoes_buy_single") {
-  return gerarPagamentoPix({
-    supabase,
-    phone,
-    user,
-    planoCodigo: "missao_avulsa_usuario",
-    referenciaTipo: "usuario_missoes_avulso",
-    tituloPlano: "Desbloqueio de missões",
-    valorFinal: 4.9,
-    metadataExtra: {
-      modo: "desbloqueio_busca_missoes",
-    },
-    afterSuccessLabel:
-      "Assim que o pagamento for aprovado, a lista completa das missões ficará liberada.",
-    backActionId: "user_ver_missoes",
-    backActionTitle: "Ver missões",
-  });
-}
-
-if (text === "confirm_missoes_buy_month") {
-  return gerarPagamentoPix({
-    supabase,
-    phone,
-    user,
-    planoCodigo: "usuario_missoes_mensal",
-    referenciaTipo: "usuario_missoes_mensal",
-    tituloPlano: "Missões mensais",
-    valorFinal: 9.9,
-    metadataExtra: {
-      cobertura: "missoes",
-      periodicidade: "mensal",
-    },
-    afterSuccessLabel:
-      "Assim que o pagamento for aprovado, seu acesso às missões ficará liberado por 30 dias.",
-    backActionId: "user_ver_missoes",
-    backActionTitle: "Ver missões",
-  });
-}
-
-if (text === "confirm_jobs_missions_buy_month") {
-  return gerarPagamentoPix({
-    supabase,
-    phone,
-    user,
-    planoCodigo: "usuario_vagas_missoes_mensal",
-    referenciaTipo: "usuario_vagas_missoes_mensal",
-    tituloPlano: "Vagas + Missões mensal",
-    valorFinal: 29.9,
-    metadataExtra: {
-      cobertura: "vagas_missoes",
-      periodicidade: "mensal",
-    },
-    afterSuccessLabel:
-      "Assim que o pagamento for aprovado, seu acesso a vagas e missões ficará liberado por 30 dias.",
-    backActionId: "jobs_pacotes",
-    backActionTitle: "Ver pacotes",
-  });
-}
-
-if (text === "confirm_jobs_total_buy_month") {
-  return gerarPagamentoPix({
-    supabase,
-    phone,
-    user,
-    planoCodigo: "usuario_total_mensal",
-    referenciaTipo: "usuario_total_mensal",
-    tituloPlano: "Plano completo mensal",
-    valorFinal: 39.9,
-    metadataExtra: {
-      cobertura: "total",
-      periodicidade: "mensal",
-      escopo: "todas",
-    },
-    afterSuccessLabel:
-      "Assim que o pagamento for aprovado, seu acesso completo ficará liberado por 30 dias.",
-    backActionId: "jobs_pacotes",
-    backActionTitle: "Ver pacotes",
-  });
-}
 
 
 if (text === "confirm_jobs_buy_month_base") {
@@ -1433,27 +1057,6 @@ if (text === "confirm_jobs_buy_month_all") {
   });
 }
 
-if (text === "confirm_job_service_buy_30d") {
-  return gerarPagamentoPix({
-    supabase,
-    phone,
-    user,
-    planoCodigo: "profissional_anuncio_30d",
-    referenciaTipo: "profissional_anuncio",
-    tituloPlano: "Divulgação do meu serviço - 30 dias",
-    valorFinal: 9.9,
-    metadataExtra: {
-      modo: "divulgacao_trabalho",
-      categoria_chave: user.categoria_principal,
-      contato_whatsapp: user.telefone,
-      categorias_extras: [],
-    },
-    afterSuccessLabel:
-      "Assim que o pagamento for aprovado, seu perfil profissional ficará visível por 30 dias nas buscas.",
-      backActionId: "prof_pacotes",
-      backActionTitle: "Ver divulgação",
-  });
-}
 if (text === "job_service_highlight_7d") {
   return explicarPacoteAntesDoPagamento(phone, "job_service_highlight_7d");
 }
@@ -1500,28 +1103,6 @@ if (text === "confirm_job_service_highlight_30d") {
 }
 
 
-  // =====================
-  // DESBLOQUEIO AVULSO DA BUSCA
-  // =====================
-
-  if (text === "jobs_buy_single") {
-  return explicarPacoteAntesDoPagamento(phone, "jobs_buy_single");
-}
-if (text === "missoes_buy_single") {
-  return explicarPacoteAntesDoPagamento(phone, "missoes_buy_single");
-}
-
-if (text === "missoes_buy_month") {
-  return explicarPacoteAntesDoPagamento(phone, "missoes_buy_month");
-}
-
-if (text === "jobs_missions_buy_month") {
-  return explicarPacoteAntesDoPagamento(phone, "jobs_missions_buy_month");
-}
-
-if (text === "jobs_total_buy_month") {
-  return explicarPacoteAntesDoPagamento(phone, "jobs_total_buy_month");
-}
 
 
 
@@ -1552,11 +1133,7 @@ if (text === "jobs_total_buy_month") {
   // DIVULGAR MEU TRABALHO
   // =====================
 
-  if (text === "job_service_buy_30d") {
-
-  return explicarPacoteAntesDoPagamento(phone, "job_service_buy_30d");
-
-}
+  
 
   if (text === "job_service_highlight_30d") {
 

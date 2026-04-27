@@ -19,7 +19,7 @@ export function sendMenuUsuario(phone) {
   rows: [
     { id: "user_ver_vagas", title: "📌 Vagas minha área" },
     { id: "user_explorar_vagas", title: "🌍 Todas as vagas" },
-    { id: "user_ver_missoes", title: "🛠️ Missões / bicos" },
+    { id: "user_ver_missoes", title: "🔥 Missões" },
     { id: "jobs_pacotes", title: "🔔 Notificações" },
   ],
 },
